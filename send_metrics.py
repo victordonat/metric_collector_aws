@@ -1,3 +1,4 @@
+import time
 import json
 from datetime import datetime, timezone
 from typing import Callable, Dict, Any
@@ -53,6 +54,18 @@ def get_disk_usage(vol: str) -> float:
     except Exception as e:
         raise GetDiskUsageError(f"Failed to retrieve disk usage: {str(e)}")
 
+def get_uptime_metric():
+    """
+    Get the UpTime of this machine.
+
+    Returns:
+        float: UpTime in seconds
+    """
+    boot_time = psutil.boot_time()
+    now = time.time()
+    uptime_seconds = now - boot_time
+    uptime_minutes = uptime_seconds
+    return uptime_minutes
 
 def build_metric_data(
     metric_name: str, 
@@ -85,7 +98,7 @@ def put_metrics(
     aws_access_key_id: str,
     aws_secret_access_key: str,
     aws_session_token: str,
-    metric_collector: Callable[[], float],
+    metric_data: list,
     cw_namespace: str,
     region_name: str
 ) -> None:
@@ -110,16 +123,10 @@ def put_metrics(
         )
     except Exception as e:
         raise CreateCognitoclientError(f"Failed to create CloudWatch client: {str(e)}")
-    metric_data_value = metric_collector()
-    metric_data = build_metric_data(
-        metric_name=ct.metric_name_disk_usage,
-        value=metric_data_value,
-        unit=ct.UNIT_PERCENT,
-    )
     try:
         cw.put_metric_data(
             Namespace=cw_namespace,
-            MetricData=[metric_data]
+            MetricData=metric_data
         )
     except Exception as e:
         raise SendMetricError(f"Failed to send metric: {str(e)}")
@@ -224,12 +231,28 @@ def main():
     now_utc = datetime.now(timezone.utc)
     creds = load_credentials(now_utc=now_utc)
     config = Config()
+    metric_data = [
+        {
+            ct.KEY_METRIC_NAME: ct.metric_name_disk_usage,
+            ct.KEY_TIMESTAMP: datetime.now(pytz.UTC),
+            ct.KEY_VALUE: get_disk_usage(vol=config.vol),
+            ct.KEY_UNIT: ct.UNIT_PERCENT,
+            "Dimensions": [{"Name": "DiskUsage", "Value": "DiskUsage"}]
+        },
+        {
+            ct.KEY_METRIC_NAME: "Uptime",
+            ct.KEY_TIMESTAMP: datetime.now(pytz.UTC),
+            ct.KEY_VALUE: get_uptime_metric(),
+            ct.KEY_UNIT: "Seconds",
+            "Dimensions": [{"Name": "UpTime", "Value": "UpTime"}]
+        }
+    ]
     if creds is not None:
         put_metrics(
             aws_access_key_id=creds[ct.ACCESS_KEY_ID],
             aws_secret_access_key=creds[ct.SECRET_KEY],
             aws_session_token=creds[ct.SESSION_TOKEN],
-            metric_collector=(lambda:get_disk_usage(vol = config.vol)),
+            metric_data=metric_data,
             cw_namespace=config.cw_namespace,
             region_name=config.region
         )
@@ -251,7 +274,7 @@ def main():
             aws_access_key_id=creds[ct.ACCESS_KEY_ID],
             aws_secret_access_key=creds[ct.SECRET_KEY],
             aws_session_token=creds[ct.SESSION_TOKEN],
-            metric_collector=(lambda:get_disk_usage(vol = config.vol)),
+            metric_data=metric_data,
             cw_namespace=config.cw_namespace,
             region_name=config.region
         )
