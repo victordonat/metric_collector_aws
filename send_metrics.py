@@ -237,14 +237,24 @@ def main():
             ct.KEY_TIMESTAMP: datetime.now(pytz.UTC),
             ct.KEY_VALUE: get_disk_usage(vol=config.vol),
             ct.KEY_UNIT: ct.UNIT_PERCENT,
-            "Dimensions": [{"Name": "DiskUsage", "Value": "DiskUsage"}]
+            ct.KEY_DIMENSIONS: [
+                {
+                    ct.KEY_NAME: ct.metric_name_disk_usage,
+                    ct.KEY_VALUE: config.vol
+                }
+            ]
         },
         {
-            ct.KEY_METRIC_NAME: "Uptime",
+            ct.KEY_METRIC_NAME: ct.metric_name_uptime,
             ct.KEY_TIMESTAMP: datetime.now(pytz.UTC),
             ct.KEY_VALUE: get_uptime_metric(),
-            ct.KEY_UNIT: "Seconds",
-            "Dimensions": [{"Name": "UpTime", "Value": "UpTime"}]
+            ct.KEY_UNIT: ct.UNIT_SECONDS,
+            ct.KEY_DIMENSIONS: [
+                {
+                    ct.KEY_NAME: ct.metric_name_uptime,
+                    ct.KEY_VALUE: ct.metric_name_uptime
+                }
+            ]
         }
     ]
     if creds is not None:
